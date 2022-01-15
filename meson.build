@@ -55,6 +55,10 @@ executable('sshfs', sshfs_sources,
            install: true,
            install_dir: get_option('bindir'))
 
+shared_library('sshfs', sshfs_sources,
+           include_directories: include_dirs,
+           dependencies: sshfs_deps,
+           c_args: ['-DFUSE_USE_VERSION=31', '-D_FILE_OFFSET_BITS=64'])
 if rst2man.found()
     custom_target('manpages', input: [ 'sshfs.rst' ], output: [ 'sshfs.1' ],
                   command: [rst2man, '@INPUT@', '@OUTPUT@'], install: true,

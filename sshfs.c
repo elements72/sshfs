@@ -1887,16 +1887,17 @@ static int start_processing_thread(struct conn *conn)
 static void *sshfs_init(struct fuse_conn_info *conn,
                         struct fuse_config *cfg)
 {
+	printf("Hello World\n");
 	/* Readahead should be done by kernel or sshfs but not both */
 	if (conn->capable & FUSE_CAP_ASYNC_READ)
 		sshfs.sync_read = 1;
 
 	// These workarounds require the "path" argument.
-	cfg->nullpath_ok = !(sshfs.truncate_workaround || sshfs.fstat_workaround);
+	//cfg->nullpath_ok = !(sshfs.truncate_workaround || sshfs.fstat_workaround);
 
 	// When using multiple connections, release() needs to know the path
 	if (sshfs.max_conns > 1)
-		cfg->nullpath_ok = 0;
+		//cfg->nullpath_ok = 0;
 
 	// Lookup of . and .. is supported
 	conn->capable |= FUSE_CAP_EXPORT_SUPPORT;
@@ -2315,6 +2316,7 @@ static int sshfs_opendir(const char *path, struct fuse_file_info *fi)
 		pthread_mutex_lock(&sshfs.lock);
 		handle->conn = conn;
 		handle->conn->dir_count++;
+		printf("After conn init\n");
 		pthread_mutex_unlock(&sshfs.lock);
 		fi->fh = (unsigned long) handle;
 	} else
@@ -2332,6 +2334,7 @@ static int sshfs_readdir(const char *path, void *dbuf, fuse_fill_dir_t filler,
 	struct dir_handle *handle;
 
 	handle = (struct dir_handle*) fi->fh;
+	printf("After get file handler\n");
 
 	if (sshfs.sync_readdir)
 		err = sftp_readdir_sync(handle->conn, &handle->buf, dbuf,
@@ -2340,6 +2343,7 @@ static int sshfs_readdir(const char *path, void *dbuf, fuse_fill_dir_t filler,
 		err = sftp_readdir_async(handle->conn, &handle->buf, dbuf,
 					 offset, filler);
 
+	printf("End of readdir\n");
 	return err;
 }
 
@@ -2349,13 +2353,18 @@ static int sshfs_releasedir(const char *path, struct fuse_file_info *fi)
 	int err;
 	struct dir_handle *handle;
 
+	printf("In release\n");
+
 	handle = (struct dir_handle*) fi->fh;
+	printf("After get handle\n");
 	err = sftp_request(handle->conn, SSH_FXP_CLOSE, &handle->buf, 0, NULL);
+	printf("After sftp_request\n");
 	pthread_mutex_lock(&sshfs.lock);
 	handle->conn->dir_count--;
 	pthread_mutex_unlock(&sshfs.lock);
 	buf_free(&handle->buf);
 	g_free(handle);
+	printf("End of release\n");
 	return err;
 }
 
@@ -2713,6 +2722,8 @@ static int sshfs_open_common(const char *path, mode_t mode,
 	struct iovec iov;
 	uint8_t type;
 	uint64_t wrctr = 0;
+
+	printf("In open\n");
 
 	if (sshfs.dir_cache)
 		wrctr = cache_get_write_ctr();
@@ -3380,6 +3391,8 @@ static int sshfs_getattr(const char *path, struct stat *stbuf,
 	struct buffer outbuf;
 	struct sshfs_file *sf = NULL;
 
+	printf("In getattr\n");
+
 	if (fi != NULL && !sshfs.fstat_workaround) {
 		sf = get_sshfs_file(fi);
 		if (!sshfs_file_is_conn(sf))
@@ -3406,6 +3419,7 @@ static int sshfs_getattr(const char *path, struct stat *stbuf,
 		buf_free(&outbuf);
 	}
 	buf_free(&buf);
+	printf("End of getattr\n");
 	return err;
 }
 
@@ -4151,7 +4165,13 @@ int main(int argc, char *argv[])
 #endif
 {
 	int res;
+	printf("Hello man\n");
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+	printf("Hello man2\n");
+	printf("Argc: %d\n", argc);
+	printf("Argv[1]: %s\n", argv[1]);
+	printf("Argv[2]	: %s\n", argv[2]);
+	printf("Argv[3]	: %s\n", argv[3]);
 	char *tmp;
 	char *fsname;
 	const char *sftp_server;
@@ -4236,6 +4256,8 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "see `%s -h' for usage\n", argv[0]);
 		exit(1);
 	}
+
+	printf("Hello world\n");
 
 	if (sshfs.idmap == IDMAP_USER)
 		sshfs.detect_uid = 1;
@@ -4359,21 +4381,27 @@ int main(int argc, char *argv[])
 			sizeof(struct fuse_operations), NULL);
 	if(fuse == NULL)
 		exit(1);
-	se = fuse_get_session(fuse);
-	res = fuse_set_signal_handlers(se);
+	//se = fuse_get_session(fuse);
+	res = 0;//fuse_set_signal_handlers(se);
 	if (res != 0) {
 		fuse_destroy(fuse);
 		exit(1);
 	}
 
+	printf("Before mount\n");
+	printf("sshfs.mountpoint: %s \n", sshfs.mountpoint);
 	res = fuse_mount(fuse, sshfs.mountpoint);
+	printf("After mount %d\n", res);
 	if (res != 0) {
 		fuse_destroy(fuse);
 		exit(1);
 	}
 
 #if !defined(__CYGWIN__)
-	res = fcntl(fuse_session_fd(se), F_SETFD, FD_CLOEXEC);
+	printf("Before fcntl\n");
+	res = 0; //fcntl(fuse_session_fd(se), F_SETFD, FD_CLOEXEC);
+	printf("After fcntl %d\n", res);
+
 	if (res == -1)
 		perror("WARNING: failed to set FD_CLOEXEC on fuse device");
 #endif
@@ -4382,6 +4410,7 @@ int main(int argc, char *argv[])
 	 * FIXME: trim $PATH so it doesn't contain anything inside the
 	 * mountpoint, which would deadlock.
 	 */
+	printf("Before ssh\n");
 	res = ssh_connect();
 	if (res == -1) {
 		fuse_unmount(fuse);
@@ -4389,13 +4418,13 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+	printf("Before daemonize\n");
 	res = fuse_daemonize(sshfs.foreground);
 	if (res == -1) {
 		fuse_unmount(fuse);
 		fuse_destroy(fuse);
 		exit(1);
 	}
-
 	if (sshfs.singlethread)
 		res = fuse_loop(fuse);
 	else
@@ -4406,10 +4435,13 @@ int main(int argc, char *argv[])
 	else
 		res = 0;
 
-	fuse_remove_signal_handlers(se);
+	
+	printf("After loop\n");
+	//fuse_remove_signal_handlers(se);
 	fuse_unmount(fuse);
 	fuse_destroy(fuse);
-
+	printf("After umount\n");
+	sshfs.debug = 1;
 	if (sshfs.debug) {
 		unsigned int avg_rtt = 0;
 
@@ -4428,10 +4460,11 @@ int main(int argc, char *argv[])
 		      sshfs.min_rtt, sshfs.max_rtt, avg_rtt,
 		      sshfs.num_connect);
 	}
-
+	printf("Before free\n");
 	fuse_opt_free_args(&args);
 	fuse_opt_free_args(&sshfs.ssh_args);
 	free(sshfs.directport);
+	printf("After free\n");
 
 	return res;
 }
